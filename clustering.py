@@ -70,20 +70,17 @@ def cluster_preferences_vis(cluster_category_preferences):
     # Plotting the normalised preference scores for each cluster individually
     num_clusters = cluster_category_preferences.shape[0]
 
-    fig, axes = plt.subplots(num_clusters, 1, figsize=(14, num_clusters * 4), sharex=True)
-    fig.suptitle('Normalised Average Preference Scores by Cluster and Category', fontsize=16)
-
     for i in range(num_clusters):
         cluster_preferences = cluster_category_preferences.iloc[i]
-        axes[i].bar(cluster_preferences.index, cluster_preferences)
-        axes[i].set_title(f'Cluster {cluster_category_preferences.index[i]}')
-        axes[i].set_ylabel('Normalised Preference Score')
-        axes[i].set_ylim(0, 1)
-
-    plt.xlabel('New Category')
-    plt.xticks(rotation=45)
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
+        plt.figure(figsize=(14, 4))
+        plt.bar(cluster_preferences.index, cluster_preferences)
+        plt.title(f'Cluster {cluster_category_preferences.index[i]} - Normalised Average Preference Scores')
+        plt.ylabel('Normalised Preference Score')
+        plt.ylim(0, 1)
+        plt.xlabel('New Category')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
 
 def ks_clustering_test(user_category_df):
     # Kolmogorov-Smirnov Test for Distribution Comparison
@@ -93,7 +90,7 @@ def ks_clustering_test(user_category_df):
             cluster_scores = cluster_data[cluster_data['cluster'] == cluster]['preference_score']
             overall_scores = overall_data['preference_score']
             ks_stat, p_value = ks_2samp(cluster_scores, overall_scores)
-            ks_stats[cluster] = {'ks_stat': ks_stat, 'p_value': p_value}
+            ks_stats[cluster] = {'p_value': p_value}
         return ks_stats
 
     # Compare distributions

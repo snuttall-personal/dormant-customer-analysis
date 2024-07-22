@@ -18,8 +18,9 @@ def preprocess(customer_ref, data_ref):
     # Load order data
     order_data = pd.read_csv(data_ref)
 
-    # checked nulls for customer data were fine
+    # checked nulls for customer data, we had 6 nulls which were removed.
     # print(customer_data.isnull().sum())
+    customer_data = customer_data.dropna(subset=['FIRST_MOBILE_APP_OS'])
 
     # checked nulls for order data and need to remove records without merchant
     # print(order_data.isnull().sum())
@@ -79,6 +80,22 @@ def preprocess(customer_ref, data_ref):
 
 
 def cluster_feature_preprocess(order_data_merged):
+    """
+    1. Assign recency of transaction for each user's transaction history
+    2. Calculate frequency of transaction within each category per user
+    3. Convert recency to a weighting value
+    4. Combine weighted recency and frequency into preference_score
+    5. Normalise score per user
+
+    Args:
+        order_data_merged (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+
+    #1. Calc recency
     # Calculate the most recent purchase date for each user
     most_recent_purchase = order_data_merged.groupby('ACCOUNT_ID')['ORDER_TIMESTAMP'].max().reset_index(name='most_recent_purchase')
 
@@ -87,29 +104,40 @@ def cluster_feature_preprocess(order_data_merged):
 
     # Calculate the recency relative to the user's most recent purchase
     order_data_merged['recency'] = (order_data_merged['most_recent_purchase'] - order_data_merged['ORDER_TIMESTAMP']).dt.days
-    # Calculate the frequency of purchases for each user-category combination
-    frequency_df = order_data_merged.groupby(['ACCOUNT_ID', 'New Category']).size().reset_index(name='frequency')
 
     # Calculate the average recency for each user-category combination
     recency_df = order_data_merged.groupby(['ACCOUNT_ID', 'New Category'])['recency'].mean().reset_index(name='average_recency')
 
+
+    #2. calc frequency
+    # Calculate the frequency of purchases for each user-category combination
+    frequency_df = order_data_merged.groupby(['ACCOUNT_ID', 'New Category']).size().reset_index(name='frequency')
+
     # Merge the frequency and recency dataframes
     user_category_df = pd.merge(frequency_df, recency_df, on=['ACCOUNT_ID', 'New Category'])
 
-    # Function to scale within each group ... uses min max normalisation. Least recent = 0
+
+    #3. convert recency into a weighted value
+    # Function to scale within each group using MinMaxScaler
     def scale_group(group):
+        scaler = MinMaxScaler()
         group[['average_recency']] = scaler.fit_transform(group[['average_recency']])
-        group['weighted_recency'] = (1 - group['average_recency']).round(6)
+        group['weighted_recency'] = (1 - group['average_recency']).round(6)  # Higher value means more recent
         return group
 
-    # Normalize the recency scores (higher recency means lower days) (turn into weighting value)
-    scaler = MinMaxScaler()
+    # Normalize the recency scores (higher recency means lower days) for each user
     user_category_df = user_category_df.groupby('ACCOUNT_ID').apply(scale_group).reset_index(drop=True)
 
-    # get combined score for frequency and recency
+
+    #4. combine into preference score and normalise
+    # Combine frequency and weighted recency to get the preference score
     user_category_df['preference_score'] = user_category_df['frequency'] * user_category_df['weighted_recency']
+
+    # Normalize the preference score for each user so they sum to 1
     user_category_df['preference_score'] = user_category_df.groupby('ACCOUNT_ID')['preference_score'].transform(lambda x: x / x.sum())
-    # no longer scientific notation
+
+    # Round the preference score to avoid scientific notation
     user_category_df['preference_score'] = user_category_df['preference_score'].round(6)
+
 
     return user_category_df
